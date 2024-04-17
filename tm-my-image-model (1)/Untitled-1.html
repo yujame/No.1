@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>안구 건조증 및 타이머 프로그램</title>
+    <style>
+        /* CSS 스타일링은 여기에 작성 */
+    </style>
+</head>
+<body>
+    <div>
+        <button type="button" onclick="init()">Start</button>
+        <button type="button" onclick="stop()">Stop</button>
+        <button type="button" onclick="saveBlinkData()">Save</button>
+        <button type="button" onclick="printData()">Print</button>
+    </div>
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
+    <div id="result-message"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        const URL = "./my_model/";
+        let model, webcam, labelContainer, maxPredictions;
+        let startTime, endTime;
+        let blinkCount = 0;
+        let savedBlinkData = [];
+
+        async function init() {
+            startTime = new Date(); // 시작 시간 저장
+
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            const flip = true;
+            webcam = new tmImage.Webcam(200, 200, flip);
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+
+            setTimeout(saveData, 60000); // 1분마다 데이터 저장
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+            }
+
+            if (prediction[0].probability >= 0.5) {
+                blinkCount++;
+            }
+        }
+
+        function saveBlinkData() {
+            endTime = new Date(); // 끝난 시간 저장
+            savedBlinkData.push({ start: startTime.toLocaleTimeString(), end: endTime.toLocaleTimeString(), count: blinkCount });
+            blinkCount = 0;
+            setTimeout(saveBlinkData, 60000); // 1분마다 데이터 저장
+        }
+
+        function printData() {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Saved Blink Data</title></head><body>');
+            printWindow.document.write('<h1>Saved Blink Data</h1>');
+            printWindow.document.write('<table border="1">');
+            printWindow.document.write('<tr><th>Start Time</th><th>End Time</th><th>Blink Count</th></tr>');
+            savedBlinkData.forEach(entry => {
+                printWindow.document.write(`<tr><td>${entry.start}</td><td>${entry.end}</td><td>${entry.count}</td></tr>`);
+            });
+            printWindow.document.write('</table>');
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+        }
+
+        function stop() {
+            webcam.stop();
+        }
+    </script>
+</body>
+</html>
